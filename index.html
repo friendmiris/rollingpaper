@@ -617,7 +617,7 @@ async function send(event){
  busy=true;
  try{
   const f=document.querySelector('#preview img');const photo=f?.getAttribute('src')||null;
-  await req('/rolling_letters',{method:'POST',body:JSON.stringify({paper_id:room.id,name,message,color:document.querySelector('#swatches .selected')?.style.backgroundColor||'#f4d5e1',photo})});
+  await req('/rpc/rolling_write_secure',{method:'POST',body:JSON.stringify({p_room:room.id,p_read:readPassword,p_name:name,p_message:message,p_color:document.querySelector('#swatches .selected')?.style.backgroundColor||'#f4d5e1',p_photo:photo})});
   closeModal();await refresh();toast('모든 친구에게 편지가 공유됐어요! 💌');
  }catch(e){showSaveError('편지 저장',e)}finally{busy=false}
 }
