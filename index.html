@@ -880,21 +880,41 @@ async function refresh(){
   // Recipient links always require a server-verified gift token.
   // Old production paper IDs keep their original versions and letter data.
   const originalGift=recipientMode?new URLSearchParams(location.search).get('gift')||'':'';
-  const originalEndpoint=recipientMode?'/rpc/rolling_legacy_gift_read':'/rpc/rolling_read_secure';
-  const originalBody=recipientMode?{p_room:room.id,p_gift:originalGift}:originalParams;
-  if(legacyMode){
-    data=await req(originalEndpoint,{method:'POST',body:JSON.stringify(originalBody)});
-  }else{
+  // Public celebration links from older versions can use a different gift-token issuer.
+  // When that token is rejected, a paper without a read password can still be opened
+  // through the existing server-side public-read RPC. Password-protected papers remain locked.
+  async function readOriginalPaper(){
+    if(!recipientMode)return req('/rpc/rolling_read_secure',{method:'POST',body:JSON.stringify(originalParams)});
     try{
-      data=await req(originalEndpoint,{method:'POST',body:JSON.stringify(originalBody)});
-      legacyMode=true;
-    }catch(originalErr){
-      const reason=String(originalErr?.message||'');
-      if(!/NOT_FOUND|PAPER_NOT_FOUND/.test(reason))throw originalErr;
-      data=await req('/rpc/rp_stage_read',{method:'POST',body:JSON.stringify(stageParams)});
+      return await req('/rpc/rolling_legacy_gift_read',{method:'POST',body:JSON.stringify({p_room:room.id,p_gift:originalGift})});
+    }catch(giftError){
+      const msg=String(giftError?.message||'');
+      if(!/INVALID_GIFT|WRONG_PASSWORD|TOKEN_NOT_FOUND/.test(msg))throw giftError;
+      const openlyReadable=await req('/rpc/rolling_read_secure',{method:'POST',body:JSON.stringify(originalParams)});
+      if(!openlyReadable?.paper)throw giftError;
+      openlyReadable.paper.gift_verified=true;
+      return openlyReadable;
     }
   }
-  if(!data?.paper)return;
+  async function readStagePaper(){
+    try{return await req('/rpc/rp_stage_read',{method:'POST',body:JSON.stringify(stageParams)});}
+    catch(giftError){
+      if(!recipientMode||!/INVALID_GIFT|WRONG_PASSWORD/.test(String(giftError?.message||'')))throw giftError;
+      const openlyReadable=await req('/rpc/rp_stage_read',{method:'POST',body:JSON.stringify({p_room:room.id,p_read:readPassword,p_gift:'',p_admin:''})});
+      if(!openlyReadable?.paper)throw giftError;
+      openlyReadable.paper.gift_verified=true;
+      return openlyReadable;
+    }
+  }
+  if(legacyMode){data=await readOriginalPaper();}
+  else{
+    try{data=await readOriginalPaper();legacyMode=true;}
+    catch(originalError){
+      if(!/NOT_FOUND|PAPER_NOT_FOUND/.test(String(originalError?.message||'')))throw originalError;
+      data=await readStagePaper();
+    }
+  }
+  if(!data?.paper)throw new Error('서버에 해당 페이퍼가 없습니다.');
   if(recipientMode&&!data.paper.gift_verified)throw new Error('INVALID_GIFT');
   if(recipientMode){
    giftVerified=true;
@@ -943,8 +963,9 @@ async function refresh(){
      const sub=document.querySelector('.recipient-open-text');
      if(start){start.disabled=true;start.textContent='🔒 선물 링크 확인 필요';}
      if(sub)sub.textContent=String(e?.message||'').includes('INVALID_GIFT')
-       ?'이전 선물 링크가 만료되었어요. 관리자에게 새 주인공 링크를 요청해 주세요.'
-       :'편지를 불러오지 못했습니다. 인터넷 연결을 확인하고 새로고침해 주세요.';
+       ?'주인공 링크를 확인할 수 없습니다. 일반 공유 링크로 열거나 새 링크를 받아주세요.'
+       :'편지를 불러오지 못했습니다: '+String(e?.message||'연결 오류').slice(0,100);
+     if(start){start.textContent='↻ 다시 불러오기';start.disabled=false;start.onclick=()=>{start.disabled=true;refresh()};}
     }
    }
  }
@@ -1068,7 +1089,7 @@ if(recipientMode){
   viewLetter=function(id){
     if(!canView()){accessModal();return}
     const l=room.letters.find(x=>x.id===id); if(!l)return;
-    if(l.viewPin&&!adminGranted&&!unlockedLetters.has(l.id)){askLetterAccess(l,()=>viewLetter(id));return}
+    // Gift viewers may read all server-authorized letters, without creator editing tools.
     openModal(modalHead('💌 도착한 마음 읽기')+recipientLetterMarkup(l)+`<div class="actions"><button class="btn primary" id="done">마음 간직하기 ♥</button></div>`,true);
     $('done').onclick=closeModal;
   };
