@@ -1654,5 +1654,21 @@ if(uuid.test(room.id)){
 
 
 
+
+/* Single-tap letter opening for canvas notes (regular and recipient views).
+   Edit/move/resize controls retain their existing handlers. */
+document.addEventListener('click', function openCanvasLetterOnSingleClick(event){
+  if(currentView!=='rolling')return;
+  const card=event.target.closest?.('#letters .note-card[data-letter-id]');
+  if(!card)return;
+  if(event.target.closest('button,.move-handle,.resize-handle,.edit-handle,.resize-grip,[data-no-open]'))return;
+  const letterId=card.dataset.letterId;
+  if(!letterId)return;
+  event.preventDefault();
+  event.stopPropagation();
+  event.stopImmediatePropagation();
+  viewLetter(letterId);
+},true);
+
 })();
 </script></body></html>
