@@ -1,0 +1,9 @@
+{
+  "name": "rollingpaper-permanent-archive",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {"test": "node tests/mock-integration.mjs", "check": "node --check api/_core.js && node --check api/archive-create.js && node --check api/archive-read.js && node --check api/archive-image.js"},
+  "dependencies": {"@vercel/blob": "^2.5.0"},
+  "engines": {"node": ">=20"}
+}
